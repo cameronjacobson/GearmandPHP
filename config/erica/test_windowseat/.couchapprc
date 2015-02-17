@@ -1,7 +1,0 @@
-{
-  "env" : {
-    "local" : {
-      "db" : "http://test:test@localhost:5984/test"
-    }
-  }
-}
