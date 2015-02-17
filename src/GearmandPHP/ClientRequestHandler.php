@@ -76,7 +76,7 @@ class ClientRequestHandler
 				$this->handleWorkData($data);
 				break;
 			case self::WORK_WARNING:
-				$this->handleWorkWarning$data);
+				$this->handleWorkWarning($data);
 				break;
 			case self::WORK_STATUS:
 				$this->handleWorkStatus($data);

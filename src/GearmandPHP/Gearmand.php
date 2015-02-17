@@ -1,6 +1,6 @@
 <?php
 
-namespace GearmandPHP
+namespace GearmandPHP;
 
 use \EventBase;
 use \EventUtil;
