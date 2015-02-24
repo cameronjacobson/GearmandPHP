@@ -38,7 +38,8 @@ class WorkerRequestHandler
 		$this->bev = $bev;
 	}
 
-	public function handle($type,$data,$bev){
+	public function handle($headers,$data){
+		$type = $headers['type'];
 		switch($type){
 			case self::CAN_DO:
 				$this->handleCanDo($data);
@@ -169,6 +170,7 @@ class WorkerRequestHandler
 		switch($option){
 			case 'exceptions':
 				// notify server it should forward "WORK_EXCEPTION" packets to client
+				$this->sendResponse(self::OPTION_RES,$option);
 				break;
 		}
 	}

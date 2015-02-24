@@ -21,7 +21,7 @@ class WorkerConnection
 		$this->bev->free();
 	}
 
-	public function __construct($base, $fd, $ident, EventStoreInterface $eventStore){
+	public function __construct($base, $fd, $ident, $couchdb){
 		$this->buffer = '';
 		$this->headers = array();
 		$this->base = $base;
@@ -29,7 +29,7 @@ class WorkerConnection
 		$this->ident = $ident;
 		$this->id = 0;
 		$this->index = null;
-		$this->eventStore = $eventStore;
+		//$this->eventStore = $eventStore;
 
 		$dns_base = new EventDnsBase($this->base, TRUE);
 
@@ -48,7 +48,7 @@ class WorkerConnection
 		if(!$this->bev->enable(Event::READ | Event::WRITE)){
 			echo 'failed to enable'.PHP_EOL;
 		}
-
+/*
 		// If client hasn't sent headers within 3 sec, kill it
 		$e = Event::timer($base, function() use (&$e, $ident){
 			if(empty($this->headers)){
@@ -57,6 +57,7 @@ class WorkerConnection
 			$e->delTimer();
 		});
 		$e->addTimer(3);
+*/
 	}
 
 	public function readCallback($bev/*, $arg*/) {
@@ -80,7 +81,7 @@ class WorkerConnection
 		if(isset($this->headers['size'])){
 			if($input->length >= $this->headers['size']){
 				$data = $input->length > 0 ? substr($input->read($input->length),0,$this->headers['size']) : '';
-				$this->handler->handle($this->headers['type'], $data);
+				$this->handler->handle($this->headers, $data);
 				$this->headers = array();
 			}
 		}
@@ -93,7 +94,7 @@ class WorkerConnection
 		if ($events & EventBufferEvent::TIMEOUT) {
 		}
 		if ($events & EventBufferEvent::EOF) {
-			Server::disconnect('client',$this->uuid,$this->ident,$this->index);
+			//Server::disconnect('client',$this->uuid,$this->ident,$this->index);
 		}
 		if ($events & EventBufferEvent::ERROR) {
 		}
