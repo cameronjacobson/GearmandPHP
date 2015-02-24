@@ -3,6 +3,7 @@
 namespace GearmandPHP;
 
 use \EventBase;
+use \EventDnsBase;
 use \Exception;
 use \GearmandPHP\EventStoreInterface;
 use \GearmandPHP\EventStore;
@@ -10,11 +11,12 @@ use \GearmandPHP\EventStore;
 class Config
 {
 	public $base;
+	public $dns_base;
 	public $server;
 	public $client;
 	public $store;
 
-	public function __construct($config){
+	public function __construct(EventBase $base, $config){
 
 		if(is_string($config)){
 			switch(substr(strrchr($config, "."), 1)){
@@ -30,8 +32,9 @@ class Config
 			}
 		}
 
-		if(empty($config['base']) || !($config['base'] instanceof EventBase)){
-			$config['base'] = new EventBase();
+		$dns_base = $config['dns_base'];
+		if(empty($dns_base) || !($dns_base instanceof EventBase)){
+			$dns_base = new EventDnsBase($base, true);
 		}
 
 		if(empty($config['server']['ip'])){
@@ -45,7 +48,7 @@ class Config
 		if(empty($config['server']['worker_port'])){
 			$config['server']['worker_port'] = 4731;
 		}
-
+/*
 		if(empty($config['store']) || !($config['store'] instanceof EventStoreInterface)){
 			if(empty($config['db'])){
 				$config['db'] = array(
@@ -57,8 +60,10 @@ class Config
 			}
 			$config['store'] = new EventStore(array('db'=>$config['db']));
 		}
-
-		$this->base = $config['base'];
+*/
+		$this->config = $config;
+		$this->base = $base;
+		$this->dns_base = $dns_base;
 		$this->server = $config['server'];
 		$this->store = $config['store'];
 	}

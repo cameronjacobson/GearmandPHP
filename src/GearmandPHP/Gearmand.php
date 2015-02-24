@@ -7,17 +7,40 @@ use \EventUtil;
 use \EventListener;
 use \Event;
 use \WindowSeat\WindowSeat;
+use \WindowSeat\CouchConfig;
+use \WindowSeat\EventHandler;
 use \GearmandPHP\Config;
+use \Schivel\Schivel;
+use \Phreezer\Storage\CouchDB;
 
 class Gearmand
 {
 	private $config;
 	private $listener;
 	private $base;
-	private $persistent_store;
-
+	private $couchdb;
+	private static $conn;
 	public function __construct(Config $config){
+
 		$this->config = $config;
+		$this->base = $config->base;
+		$this->dns_base = $config->dns_base;
+
+		// TODO: Consider defining an interface
+		//  instead of requiring use of Schivel
+		$this->config->base = &$this->base;
+		$this->config->dns_base = $this->dns_base;
+		$this->couchdb = new Schivel(new CouchDB(
+			$this->config->config['couchdb']
+		));
+
+		$this->windowseat = new WindowSeat(new CouchConfig(
+			$this->base,
+			$this->config->config['windowseat']
+		));
+		$this->windowseat->setEventHandler(new EventHandler());
+		$this->windowseat->initialize();
+
 
 		// TODO:
 		// Are we recovering from crash?
@@ -26,8 +49,7 @@ class Gearmand
 		// 3) Proceed with normal setup
 
 		self::$conn = array('worker'=>array(),'client'=>array());
-		$this->base = $config->base;
-		$this->persistent_store = $config->store;
+		//$this->persistent_store = $config->store;
 
 		$this->client_listener = new EventListener($this->base,
 			array($this, 'clientConnect'), $this->base,
@@ -46,7 +68,7 @@ class Gearmand
 
 	}
 
-	public function loop(){
+	public function run(){
 		$this->base->loop();
 	}
 
@@ -61,13 +83,13 @@ class Gearmand
 	public function clientConnect($listener, $fd, $address, $ctx) {
 		$base = $this->base;
 		$ident = $this->getUUID();
-		self::$conn['client'][$ident] = new ClientConnection($base, $fd, $ident, $this->persistent_store);
+		self::$conn['client'][$ident] = new ClientConnection($base, $fd, $ident, $this->couchdb);
 	}
 
 	public function workerConnect($listener, $fd, $address, $ctx) {
 		$base = $this->base;
 		$ident = $this->getUUID();
-		self::$conn['worker'][$ident] = new WorkerConnection($base, $fd, $ident, $this->persistent_store);
+		self::$conn['worker'][$ident] = new WorkerConnection($base, $fd, $ident, $this->couchdb);
 	}
 
 	public function accept_error_cb($listener, $ctx) {

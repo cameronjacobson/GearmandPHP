@@ -36,7 +36,8 @@ class ClientRequestHandler
 		$this->bev = $bev;
 	}
 
-	public function handle($type,$data){
+	public function handle($headers,$data){
+		$type = $headers['type'];
 		switch($type){
 			case self::SUBMIT_JOB:
 				$this->handleSubmitJob($data);

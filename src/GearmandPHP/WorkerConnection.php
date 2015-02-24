@@ -87,7 +87,6 @@ class WorkerConnection
 	}
 
 	public function writeCallback($bev/*, $arg*/) {
-		//var_dump($bev);
 	}
 
 	public function eventCallback($bev, $events/*, $arg*/) {

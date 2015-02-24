@@ -11,7 +11,7 @@ $base = new EventBase();
 
 $gearmand = new Gearmand(new Config(
 	$base,
-	$config['couchdb']
+	$config
 ));
 
 $gearmand->run();

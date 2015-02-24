@@ -45,7 +45,7 @@ class ClientConnection
 		$this->bev->free();
 	}
 
-	public function __construct($base, $fd, $ident, EventStoreInterface $eventStore){
+	public function __construct($base, $fd, $ident, $schivel){
 		$this->buffer = '';
 		$this->headers = array();
 		$this->base = $base;
@@ -53,7 +53,7 @@ class ClientConnection
 		$this->ident = $ident;
 		$this->id = 0;
 		$this->index = null;
-		$this->eventStore = $eventStore;
+		//$this->eventStore = $eventStore;
 
 		$dns_base = new EventDnsBase($this->base, TRUE);
 
@@ -72,7 +72,7 @@ class ClientConnection
 		if(!$this->bev->enable(Event::READ | Event::WRITE)){
 			echo 'failed to enable'.PHP_EOL;
 		}
-
+/*
 		// If client hasn't sent headers within 3 sec, kill it
 		$e = Event::timer($base, function() use (&$e, $ident){
 			if(empty($this->headers)){
@@ -81,6 +81,7 @@ class ClientConnection
 			$e->delTimer();
 		});
 		$e->addTimer(3);
+*/
 	}
 
 	public function readCallback($bev/*, $arg*/) {
@@ -111,14 +112,13 @@ class ClientConnection
 	}
 
 	public function writeCallback($bev/*, $arg*/) {
-		//var_dump($bev);
 	}
 
 	public function eventCallback($bev, $events/*, $arg*/) {
 		if ($events & EventBufferEvent::TIMEOUT) {
 		}
 		if ($events & EventBufferEvent::EOF) {
-			Server::disconnect('client',$this->uuid,$this->ident,$this->index);
+			//Server::disconnect('client',$this->uuid,$this->ident,$this->index);
 		}
 		if ($events & EventBufferEvent::ERROR) {
 		}
