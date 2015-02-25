@@ -48,6 +48,10 @@ class Config
 		if(empty($config['server']['worker_port'])){
 			$config['server']['worker_port'] = 4731;
 		}
+
+		if(empty($config['server']['admin_port'])){
+			$config['server']['admin_port'] = 4732;
+		}
 /*
 		if(empty($config['store']) || !($config['store'] instanceof EventStoreInterface)){
 			if(empty($config['db'])){

@@ -48,7 +48,7 @@ class Gearmand
 		// 2) Once updated, re-send unfinished jobs
 		// 3) Proceed with normal setup
 
-		self::$conn = array('worker'=>array(),'client'=>array());
+		self::$conn = array('worker'=>array(),'client'=>array(),'admin'=>array());
 		//$this->persistent_store = $config->store;
 
 		$this->client_listener = new EventListener($this->base,
@@ -63,8 +63,15 @@ class Gearmand
 			$config->server['ip'].':'.$config->server['worker_port']
 		);
 
+		$this->admin_listener = new EventListener($this->base,
+			array($this, 'adminConnect'), $this->base,
+			EventListener::OPT_CLOSE_ON_FREE | EventListener::OPT_REUSEABLE, -1,
+			$config->server['ip'].':'.$config->server['admin_port']
+		);
+
 		$this->client_listener->setErrorCallback(array($this, "accept_error_cb"));
 		$this->worker_listener->setErrorCallback(array($this, "accept_error_cb"));
+		$this->admin_listener->setErrorCallback(array($this, "accept_error_cb"));
 
 	}
 
@@ -90,6 +97,12 @@ class Gearmand
 		$base = $this->base;
 		$ident = $this->getUUID();
 		self::$conn['worker'][$ident] = new WorkerConnection($base, $fd, $ident, $this->couchdb);
+	}
+
+	public function adminConnect($listener, $fd, $address, $ctx) {
+		$base = $this->base;
+		$ident = $this->getUUID();
+		self::$conn['admin'][$ident] = new AdminConnection($base, $fd, $ident, $this->couchdb);
 	}
 
 	public function accept_error_cb($listener, $ctx) {
