@@ -89,19 +89,19 @@ class Gearmand
 
 	public function clientConnect($listener, $fd, $address, $ctx) {
 		$base = $this->base;
-		$ident = $this->getUUID();
+		$ident = $this->getUUID('client');
 		self::$conn['client'][$ident] = new ClientConnection($base, $fd, $ident, $this->couchdb);
 	}
 
 	public function workerConnect($listener, $fd, $address, $ctx) {
 		$base = $this->base;
-		$ident = $this->getUUID();
+		$ident = $this->getUUID('worker');
 		self::$conn['worker'][$ident] = new WorkerConnection($base, $fd, $ident, $this->couchdb);
 	}
 
 	public function adminConnect($listener, $fd, $address, $ctx) {
 		$base = $this->base;
-		$ident = $this->getUUID();
+		$ident = $this->getUUID('admin');
 		self::$conn['admin'][$ident] = new AdminConnection($base, $fd, $ident, $this->couchdb);
 	}
 
@@ -116,14 +116,20 @@ class Gearmand
 		$base->exit(NULL);
 	}
 
-	private function getUUID(){
-		return sprintf(
+	private function getUUID($type){
+		$uuid = sprintf(
 			'%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
 			mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
 			mt_rand(0, 0x0fff) | 0x4000,
 			mt_rand(0, 0x3fff) | 0x8000,
 			mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
 		);
+		if(empty(self::$conn[$type][$uuid])){
+			return $uuid;
+		}
+		else{
+			return $this->getUUID($type);
+		}
 	}
 
 	private function E($val){

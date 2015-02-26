@@ -84,7 +84,8 @@ class AdminRequestHandler
 	private function handleShowUniqueJobs(){
 		// can be any arbitrary data
 		// No info in SPEC
-		// TODO: Find out what existing gearmand provides
+		// TODO: per source code...
+		//   data.vec_append_printf("%.*s\n", int(server_job->unique_length), server_job->unique);
 		$this->sendResponse('20 127.0.0.1 blah : a b c',true);
 	}
 
@@ -98,7 +99,9 @@ class AdminRequestHandler
 	private function handleShowJobs(){
 		// can be any arbitrary data
 		// No info in SPEC
-		// TODO: Find out what existing gearmand provides
+		// TODO: per source code...
+		//   data.vec_append_printf("%s\t%u\t%u\t%u\n", server_job->job_handle, uint32_t(server_job->retries),
+		//                       uint32_t(server_job->ignore_job), uint32_t(server_job->job_queued));
 		$this->sendResponse('20 127.0.0.1 blah : a b c',true);
 	}
 
