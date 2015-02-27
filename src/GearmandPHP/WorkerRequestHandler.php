@@ -56,15 +56,6 @@ class WorkerRequestHandler
 			case self::GRAB_JOB:
 				$this->handleGrabJob($data);
 				break;
-			case self::WORK_STATUS:
-				$this->handleWorkStatus($data);
-				break;
-			case self::WORK_COMPLETE:
-				$this->handleWorkComplete($data);
-				break;
-			case self::WORK_FAIL:
-				$this->handleWorkFail($data);
-				break;
 			case self::ECHO_REQ:
 				$this->handleEchoReq($data);
 				break;
@@ -77,20 +68,30 @@ class WorkerRequestHandler
 			case self::ALL_YOURS:
 				$this->handleAllYours($data);
 				break;
-			case self::WORK_EXCEPTION:
-				$this->handleWorkException($data);
-				break;
 			case self::OPTION_REQ:
 				$this->handleOptionReq($data);
+				break;
+			case self::GRAB_JOB_UNIQ:
+				$this->handleGrabJobUniq($data);
+				break;
+
+			case self::WORK_STATUS:
+				$this->handleWorkStatus($data);
+				break;
+			case self::WORK_COMPLETE:
+				$this->handleWorkComplete($data);
+				break;
+			case self::WORK_FAIL:
+				$this->handleWorkFail($data);
+				break;
+			case self::WORK_EXCEPTION:
+				$this->handleWorkException($data);
 				break;
 			case self::WORK_DATA:
 				$this->handleWorkData($data);
 				break;
 			case self::WORK_WARNING:
 				$this->handleWorkWarning($data);
-				break;
-			case self::GRAB_JOB_UNIQ:
-				$this->handleGrabJobUniq($data);
 				break;
 			default:
 				//INVALID WORKER REQUEST TYPE
@@ -123,21 +124,6 @@ class WorkerRequestHandler
 		// server responds with "NO_JOB" or "JOB_ASSIGN"
 	}
 
-	private function handleWorkStatus($data){
-		list($handle,$percent_numerator,$percent_denominator) = explode(0x00,$data);
-		// relay "percentage complete" to client, and update on server
-	}
-
-	private function handleWorkComplete($data){
-		list($handle,$data) = explode(0x00,$data);
-		// notify server / clients that the job completed successfully
-	}
-
-	private function handleWorkFail($data){
-		$handle = $data;
-		// notify server / clients that job failed
-	}
-
 	private function handleEchoReq($data){
 		$this->sendResponse(self::ECHO_RES,$data);
 	}
@@ -158,10 +144,26 @@ class WorkerRequestHandler
 		// notify server that the worker is connected exclusively
 	}
 
+	private function handleWorkStatus($data){
+		list($handle,$percent_numerator,$percent_denominator) = explode(0x00,$data);
+		// relay "percentage complete" to client, and update on server
+	}
+
+	private function handleWorkComplete($data){
+		list($handle,$data) = explode(0x00,$data);
+		// notify server / clients that the job completed successfully
+	}
+
+	private function handleWorkFail($data){
+		$handle = $data;
+		// notify server / clients that job failed
+	}
+
 	private function handleWorkException($data){
 		list($handle,$data) = explode(0x00,$data);
 		// notify server / clients that the job failed
 		// $data is info about the exception
+		GearmandPHP::$conn['client']
 	}
 
 	private function handleOptionReq($data){

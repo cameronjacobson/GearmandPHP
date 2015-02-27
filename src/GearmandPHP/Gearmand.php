@@ -12,6 +12,8 @@ use \WindowSeat\EventHandler;
 use \GearmandPHP\Config;
 use \Schivel\Schivel;
 use \Phreezer\Storage\CouchDB;
+use \GearmandPHP\JobQueue;
+use \GearmandPHP\Job;
 
 class Gearmand
 {
@@ -19,7 +21,9 @@ class Gearmand
 	private $listener;
 	private $base;
 	private $couchdb;
-	private static $conn;
+	public static $state;
+	public static $priority_queue;
+
 	public function __construct(Config $config){
 
 		$this->config = $config;
@@ -48,7 +52,15 @@ class Gearmand
 		// 2) Once updated, re-send unfinished jobs
 		// 3) Proceed with normal setup
 
-		self::$conn = array('worker'=>array(),'client'=>array(),'admin'=>array());
+		self::$state = array(
+			'worker'=>array(),
+			'client'=>array(),
+			'admin'=>array(),
+			'jobs'=>array()
+		);
+
+		self::$priority_queue = new JobQueue();
+
 		//$this->persistent_store = $config->store;
 
 		$this->client_listener = new EventListener($this->base,
@@ -80,7 +92,7 @@ class Gearmand
 	}
 
 	public function __destruct() {
-		foreach (self::$conn as &$c) $c = NULL;
+		foreach (self::$state as &$c) $c = NULL;
 	}
 
 	public function dispatch() {
@@ -90,19 +102,93 @@ class Gearmand
 	public function clientConnect($listener, $fd, $address, $ctx) {
 		$base = $this->base;
 		$ident = $this->getUUID('client');
-		self::$conn['client'][$ident] = new ClientConnection($base, $fd, $ident, $this->couchdb);
+		self::$state['client'][$ident] = array(
+			'connection'=>new ClientConnection($base, $fd, $ident, $this->couchdb)
+		);
 	}
 
 	public function workerConnect($listener, $fd, $address, $ctx) {
 		$base = $this->base;
 		$ident = $this->getUUID('worker');
-		self::$conn['worker'][$ident] = new WorkerConnection($base, $fd, $ident, $this->couchdb);
+		self::$state['worker'][$ident] = array(
+			'connection'=>new WorkerConnection($base, $fd, $ident, $this->couchdb)
+		);
 	}
 
 	public function adminConnect($listener, $fd, $address, $ctx) {
 		$base = $this->base;
 		$ident = $this->getUUID('admin');
-		self::$conn['admin'][$ident] = new AdminConnection($base, $fd, $ident, $this->couchdb);
+		self::$state['admin'][$ident] = array(
+			'connection'=>new AdminConnection($base, $fd, $ident, $this->couchdb)
+		);
+	}
+
+
+
+	public static function setJobState($ident, $key, $value){
+		self::$state['job'][$ident][$key] = $value;
+	}
+
+	public static function setAdminState($ident, $key, $value){
+		if(!in_array($key,array('connection'))){
+			self::$state['admin'][$ident][$key] = $value;
+		}
+	}
+
+	public static function setClientState($ident, $key, $value){
+		if(!in_array($key,array('connection'))){
+			self::$state['client'][$ident][$key] = $value;
+		}
+	}
+
+	public static function setWorkerState($ident, $key, $value){
+		if(!in_array($key,array('connection'))){
+			self::$state['worker'][$ident][$key] = $value;
+		}
+	}
+
+	public static function workerAddFunction($ident, $function_name){
+		self::$state['worker'][$ident]['functions'][$function_name] = true;
+	}
+
+	public static function workerRemoveFunction($ident, $function_name){
+		if(!isset(self::$state['worker'][$ident]['functions'][$function_name])){
+			unset(self::$state['worker'][$ident]['functions'][$function_name]);
+		}
+	}
+
+	public static function getJobState($ident, $key){
+		self::$state['job'][$ident][$key] = $value;
+	}
+
+	public static function getAdminState($ident, $key){
+		self::$state['admin'][$ident][$key] = $value;
+	}
+
+	public static function getClientState($ident, $key){
+		self::$state['client'][$ident][$key] = $value;
+	}
+
+	public static function getWorkerState($ident, $key){
+		self::$state['worker'][$ident][$key] = $value;
+	}
+
+
+
+	public static function createJob($client_ident, array $job_data){
+		$ident = $this->getUUID('jobs');
+		$job = new Job($job_data);
+
+		self::$state['jobs'][$ident] = array(
+			'client'=>$client_ident,
+			'job'=>$job
+		);
+
+		$this->couchdb->store($job, function($uuid){ });
+	}
+
+	public static function removeJob($job_uuid){
+		unset(self::$state['jobs'][$job_uuid]);
 	}
 
 	public function accept_error_cb($listener, $ctx) {
@@ -124,7 +210,7 @@ class Gearmand
 			mt_rand(0, 0x3fff) | 0x8000,
 			mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
 		);
-		if(empty(self::$conn[$type][$uuid])){
+		if(empty(self::$state[$type][$uuid])){
 			return $uuid;
 		}
 		else{

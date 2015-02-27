@@ -36,6 +36,34 @@ class ClientRequestHandler
 		$this->bev = $bev;
 	}
 
+	public function relay($headers,$data){
+		$type = $headers['type'];
+		switch($type){
+			// WORK_* requests are relayed from worker
+			case self::WORK_DATA:
+				$this->handleWorkData($data);
+				break;
+			case self::WORK_WARNING:
+				$this->handleWorkWarning($data);
+				break;
+			case self::WORK_STATUS:
+				$this->handleWorkStatus($data);
+				break;
+			case self::WORK_COMPLETE:
+				$this->handleWorkComplete($data);
+				break;
+			case self::WORK_FAIL:
+				$this->handleWorkFail($data);
+				break;
+			case self::WORK_EXCEPTION:
+				$this->handleWorkException($data);
+				break;
+			default:
+				//INVALID RELAY REQUEST TYPE
+				break;
+		}
+	}
+
 	public function handle($headers,$data){
 		$type = $headers['type'];
 		switch($type){
@@ -72,27 +100,8 @@ class ClientRequestHandler
 			case self::SUBMIT_JOB_EPOCH:
 				$this->handleSubmitJobEpoch($data);
 				break;
-			// WORK_* requests are relayed from worker
-			case self::WORK_DATA:
-				$this->handleWorkData($data);
-				break;
-			case self::WORK_WARNING:
-				$this->handleWorkWarning($data);
-				break;
-			case self::WORK_STATUS:
-				$this->handleWorkStatus($data);
-				break;
-			case self::WORK_COMPLETE:
-				$this->handleWorkComplete($data);
-				break;
-			case self::WORK_FAIL:
-				$this->handleWorkFail($data);
-				break;
-			case self::WORK_EXCEPTION:
-				$this->handleWorkException($data);
-				break;
 			default:
-				//INVALID WORKER REQUEST TYPE
+				//INVALID CLIENT REQUEST TYPE
 				break;
 		}
 	}
