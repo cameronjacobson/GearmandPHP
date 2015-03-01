@@ -34,8 +34,10 @@ class WorkerRequestHandler
 
 	private $bev;
 
-	public function __construct($bev){
+	public function __construct($ident,$bev,$schivel){
+		$this->ident = $ident;
 		$this->bev = $bev;
+		$this->schivel = $schivel;
 	}
 
 	public function handle($headers,$data){
@@ -48,13 +50,13 @@ class WorkerRequestHandler
 				$this->handleCantDo($data);
 				break;
 			case self::RESET_ABILITIES:
-				$this->handleResetAbilities($data);
+				$this->handleResetAbilities();
 				break;
 			case self::PRE_SLEEP:
 				$this->handlePreSleep($data);
 				break;
 			case self::GRAB_JOB:
-				$this->handleGrabJob($data);
+				$this->handleGrabJob();
 				break;
 			case self::ECHO_REQ:
 				$this->handleEchoReq($data);
@@ -72,9 +74,8 @@ class WorkerRequestHandler
 				$this->handleOptionReq($data);
 				break;
 			case self::GRAB_JOB_UNIQ:
-				$this->handleGrabJobUniq($data);
+				$this->handleGrabJobUniq();
 				break;
-
 			case self::WORK_STATUS:
 				$this->handleWorkStatus($data);
 				break;
@@ -99,17 +100,51 @@ class WorkerRequestHandler
 		}
 	}
 
+
+
+	private function handleGrabJob(){
+		// server responds with "NO_JOB" or "JOB_ASSIGN"
+		if($job = $this->getJobFromQueue()){
+			$this->sendResponse(self::JOB_ASSIGN, $job->uuid, $job->function_name);
+		}
+		else{
+			$this->sendResponse(self::NO_JOB);
+		}
+	}
+
+	private function handleGrabJobUniq(){
+		// server responds with "NO_JOB" or "JOB_ASSIGN_UNIQ"
+		if($job = $this->getJobFromQueue()){
+			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->uuid, $job->function_name, $job->client_uuid);
+		}
+		else{
+			$this->sendResponse(self::NO_JOB);
+		}
+	}
+
+
+
+
 	private function handleCanDo($data){
-		$function_name = $data;
+		GearmandPHP::workerAddFunction($this->ident, $data);
 	}
 
 	private function handleCantDo($data){
-		$function_name = $data;
+		GearmandPHP::workerRemoveFunction($this->ident, $data);
 	}
 
-	private function handleResetAbilities($data){
+	private function handleResetAbilities(){
 		// $data is empty
 		// RESET "abilities" to empty
+		GearmandPHP::setWorkerState($this->ident, 'functions', array());
+	}
+
+	private function handleCanDoTimeout($data){
+		list($function_name,$timeout) = explode(0x00,$data);
+		// same as "CAN_DO", but $timeout indicates how long the job can run
+		// if the job takes longer than $timeout seconds, it will fail
+		$timeout = max(0,(int)$timeout);
+		GearmandPHP::workerAddFunction($this->ident, $data, $timeout);
 	}
 
 	private function handlePreSleep($data){
@@ -117,11 +152,7 @@ class WorkerRequestHandler
 		// Set "status" to "sleeping"
 		//   which means server needs to wake up worker with "NOOP"
 		//   if a job comes in that the worker can do
-	}
-
-	private function handleGrabJob($data){
-		// $data is empty
-		// server responds with "NO_JOB" or "JOB_ASSIGN"
+		GearmandPHP::setWorkerState($this->ident, 'state', 'sleeping');
 	}
 
 	private function handleEchoReq($data){
@@ -131,69 +162,76 @@ class WorkerRequestHandler
 	private function handleSetClientID($data){
 		$client_id = $data;
 		// unique string to identify the worker instance
-	}
-
-	private function handleCanDoTimeout($data){
-		list($function_name,$timeout) = explode(0x00,$data);
-		// same as "CAN_DO", but $timeout indicates how long the job can run
-		// if the job takes longer than $timeout seconds, it will fail
+		GearmandPHP::setWorkerState($this->ident, 'alias', $client_id);
 	}
 
 	private function handleAllYours($data){
 		// $data is empty
 		// notify server that the worker is connected exclusively
+		GearmandPHP::setWorkerState($this->ident, 'state', 'waiting');
 	}
 
 	private function handleWorkStatus($data){
-		list($handle,$percent_numerator,$percent_denominator) = explode(0x00,$data);
+		list($handle,$numerator,$denominator) = explode(0x00,$data);
 		// relay "percentage complete" to client, and update on server
+		GearmandPHP::setJobState($handle, 'percent_done_numerator', $numerator);
+		GearmandPHP::setJobState($handle, 'percent_done_denominator', $denominator);
+		$client_uuid = $this->getJobClient($handle);
+		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_STATUS, $data);
 	}
 
+	// notify server / clients that the job completed successfully
 	private function handleWorkComplete($data){
 		list($handle,$data) = explode(0x00,$data);
-		// notify server / clients that the job completed successfully
+		$client_uuid = $this->getJobClient($handle);
+		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_COMPLETE, $data);
 	}
 
+	// notify server / clients that job failed
 	private function handleWorkFail($data){
 		$handle = $data;
-		// notify server / clients that job failed
+		$client_uuid = $this->getJobClient($handle);
+		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_FAIL);
 	}
 
+	// notify server / clients that the job failed
+	// $data is info about the exception
 	private function handleWorkException($data){
 		list($handle,$data) = explode(0x00,$data);
-		// notify server / clients that the job failed
-		// $data is info about the exception
-		GearmandPHP::$conn['client']
+		$client_uuid = $this->getJobClient($handle);
+		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_EXCEPTION, $data);
+	}
+
+	// supposed to relay progress info or job info to client
+	private function handleWorkData($data){
+		list($handle,$data) = explode(0x00,$data);
+		$client_uuid = $this->getJobClient($handle);
+		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_DATA, $data);
+	}
+
+	// relay "warning" data to the client
+	private function handleWorkWarning($data){
+		list($handle,$data) = explode(0x00,$data);
+		$client_uuid = $this->getJobClient($handle);
+		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_WARNING, $data);
 	}
 
 	private function handleOptionReq($data){
 		$option = $data;
-		// currently only "exceptions" is a possibility here
+		// currently "exceptions" is only documented possibility here
 		switch($option){
 			case 'exceptions':
-				// notify server it should forward "WORK_EXCEPTION" packets to client
-				$this->sendResponse(self::OPTION_RES,$option);
+				GearmandPHP::setWorkerAddOption($this->ident, $option);
+				break;
+			default:
+				error_log('worker received unknown option request: '.$option);
 				break;
 		}
-	}
-
-	private function handleWorkData($data){
-		list($handle,$data) = explode(0x00,$data);
-		// supposed to relay progress info or job info to client
-	}
-
-	private function handleWorkWarning($data){
-		list($handle,$data) = explode(0x00,$data);
-		// relay "warning" data to the client
-	}
-
-	private function handleGrabJobUniq($data){
-		// $data is empty
-		// server responds with "NO_JOB" or "JOB_ASSIGN_UNIQ"
+		$this->sendResponse(self::OPTION_RES,$option);
 	}
 
 
-	public function sendResponse($type, $message){
+	public function sendResponse($type, $message = ''){
 
 		$response = pack('c4',0x00,ord('R'),ord('E'),ord('S'));
 		$response.= pack('N',$type);

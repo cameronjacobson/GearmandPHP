@@ -8,7 +8,7 @@ use \EventListener;
 use \Event;
 use \WindowSeat\WindowSeat;
 use \WindowSeat\CouchConfig;
-use \WindowSeat\EventHandler;
+use \GearmandPHP\EventHandler;
 use \GearmandPHP\Config;
 use \Schivel\Schivel;
 use \Phreezer\Storage\CouchDB;
@@ -147,8 +147,12 @@ class Gearmand
 		}
 	}
 
-	public static function workerAddFunction($ident, $function_name){
-		self::$state['worker'][$ident]['functions'][$function_name] = true;
+	public static function workerAddOption($ident, $option_name){
+		self::$state['worker'][$ident]['options'][$option_name] = true;
+	}
+
+	public static function workerAddFunction($ident, $function_name, $timeout = 0){
+		self::$state['worker'][$ident]['functions'][$function_name] = $timeout;
 	}
 
 	public static function workerRemoveFunction($ident, $function_name){
@@ -156,6 +160,8 @@ class Gearmand
 			unset(self::$state['worker'][$ident]['functions'][$function_name]);
 		}
 	}
+
+
 
 	public static function getJobState($ident, $key){
 		self::$state['job'][$ident][$key] = $value;
@@ -175,21 +181,15 @@ class Gearmand
 
 
 
-	public static function createJob($client_ident, array $job_data){
-		$ident = $this->getUUID('jobs');
-		$job = new Job($job_data);
-
-		self::$state['jobs'][$ident] = array(
-			'client'=>$client_ident,
-			'job'=>$job
-		);
-
-		$this->couchdb->store($job, function($uuid){ });
+	public static function registerJob($ident, Job $job){
+		self::$state['jobs'][$ident] = $job;
 	}
 
-	public static function removeJob($job_uuid){
+	public static function unregisterJob($job_uuid){
 		unset(self::$state['jobs'][$job_uuid]);
 	}
+
+
 
 	public function accept_error_cb($listener, $ctx) {
 		$base = $this->base;

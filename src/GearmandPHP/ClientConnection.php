@@ -55,6 +55,8 @@ class ClientConnection
 		$this->index = null;
 		//$this->eventStore = $eventStore;
 
+		$this->schivel = $schivel;
+
 		$dns_base = new EventDnsBase($this->base, TRUE);
 
 		$this->bev = new EventBufferEvent($this->base, $fd,
@@ -91,7 +93,7 @@ class ClientConnection
 				switch(chr(implode('',unpack("c",substr($input->read(4),3))))){
 					case 'Q':
 						$this->headers['which'] = 'REQ';
-						$this->handler = new ClientRequestHandler($bev);
+						$this->handler = new ClientRequestHandler($this->ident, $bev, $this->schivel);
 						break;
 					case 'S': // clients send requests, not responses
 					default:
@@ -124,7 +126,7 @@ class ClientConnection
 		}
 	}
 
-	public function sendResponse($type, $message, $id = null){
+	public function sendResponse($type, $message){
 
 		$response = pack('c4',0x00,ord('R'),ord('E'),ord('S'));
 		$response.= pack('N',$type);

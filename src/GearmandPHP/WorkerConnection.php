@@ -21,7 +21,7 @@ class WorkerConnection
 		$this->bev->free();
 	}
 
-	public function __construct($base, $fd, $ident, $couchdb){
+	public function __construct($base, $fd, $ident, $schivel){
 		$this->buffer = '';
 		$this->headers = array();
 		$this->base = $base;
@@ -30,6 +30,8 @@ class WorkerConnection
 		$this->id = 0;
 		$this->index = null;
 		//$this->eventStore = $eventStore;
+
+		$this->schivel = $schivel;
 
 		$dns_base = new EventDnsBase($this->base, TRUE);
 
@@ -67,7 +69,7 @@ class WorkerConnection
 				switch(chr(implode('',unpack("c",substr($input->read(4),3))))){
 					case 'Q':
 						$this->headers['which'] = 'REQ';
-						$this->handler = new WorkerRequestHandler($bev);
+						$this->handler = new WorkerRequestHandler($this->ident, $bev, $this->schivel);
 						break;
 					case 'S': // Workers send requests, not responses
 					default:
@@ -100,7 +102,7 @@ class WorkerConnection
 		}
 	}
 
-	public function sendResponse($type, $message, $id = null){
+	public function sendResponse($type, $message){
 
 		$response = pack('c4',0x00,ord('R'),ord('E'),ord('S'));
 		$response.= pack('N',$type);

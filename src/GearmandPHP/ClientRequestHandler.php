@@ -2,6 +2,8 @@
 
 namespace GearmandPHP;
 
+use \GearmandPHP\Job;
+
 class ClientRequestHandler
 {
 	// Request Types
@@ -32,8 +34,10 @@ class ClientRequestHandler
 
 	private $bev;
 
-	public function __construct($bev){
+	public function __construct($ident, $bev, $schivel){
+		$this->ident = $ident;
 		$this->bev = $bev;
+		$this->schivel = $schivel;
 	}
 
 	public function relay($headers,$data){
@@ -142,8 +146,18 @@ class ClientRequestHandler
 		list($function_name,$unique_id,$data) = explode(0x00,$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
-		$this->sendResponse(self::JOB_CREATED,$handle);
-		// WILL update client with status
+
+		$job = new Job();
+		$job->client_uuid = $this->ident;
+		$job->delay = 0;
+		$job->created = time();
+		$job->priority = 'normal';
+		$job->function_name = $function_name;
+		$job->uniq_id = $unique_id;
+		$job->background = false;
+		$job->payload = $data;
+
+		$this->createJob($job);
 	}
 
 	private function handleGetStatus($data){
@@ -167,16 +181,36 @@ class ClientRequestHandler
 		list($function_name,$unique_id,$data) = explode(0x00,$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
-		$this->sendResponse(self::JOB_CREATED,$handle);
-		// will NOT update client with status
+
+		$job = new Job();
+		$job->client_uuid = $this->ident;
+		$job->delay = 0;
+		$job->created = time();
+		$job->priority = 'normal';
+		$job->function_name = $function_name;
+		$job->uniq_id = $unique_id;
+		$job->background = true;
+		$job->payload = $data;
+
+		$this->createJob($job);
 	}
 
 	private function handleSubmitJobHigh($data){
 		list($function_name,$unique_id,$data) = explode(0x00,$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
-		$this->sendResponse(self::JOB_CREATED,$handle);
-		// WILL update client with status
+
+		$job = new Job();
+		$job->client_uuid = $this->ident;
+		$job->delay = 0;
+		$job->created = time();
+		$job->priority = 'high';
+		$job->function_name = $function_name;
+		$job->uniq_id = $unique_id;
+		$job->background = false;
+		$job->payload = $data;
+
+		$this->createJob($job);
 	}
 
 	private function handleOptionReq($data){
@@ -194,24 +228,54 @@ class ClientRequestHandler
 		list($function_name,$unique_id,$data) = explode(0x00,$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
-		$this->sendResponse(self::JOB_CREATED,$handle);
-		// will NOT update client with status
+
+		$job = new Job();
+		$job->client_uuid = $this->ident;
+		$job->delay = 0;
+		$job->created = time();
+		$job->priority = 'high';
+		$job->function_name = $function_name;
+		$job->uniq_id = $unique_id;
+		$job->background = true;
+		$job->payload = $data;
+
+		$this->createJob($job);
 	}
 
 	private function handleSubmitJobLow($data){
 		list($function_name,$unique_id,$data) = explode(0x00,$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
-		$this->sendResponse(self::JOB_CREATED,$handle);
-		// WILL update client with status
+
+		$job = new Job();
+		$job->client_uuid = $this->ident;
+		$job->delay = 0;
+		$job->created = time();
+		$job->priority = 'low';
+		$job->function_name = $function_name;
+		$job->uniq_id = $unique_id;
+		$job->background = false;
+		$job->payload = $data;
+
+		$this->createJob($job);
 	}
 
 	private function handleSubmitJobLowBg($data){
 		list($function_name,$unique_id,$data) = explode(0x00,$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
-		$this->sendResponse(self::JOB_CREATED,$handle);
-		// will NOT update client with status
+
+		$job = new Job();
+		$job->client_uuid = $this->ident;
+		$job->delay = 0;
+		$job->created = time();
+		$job->priority = 'low';
+		$job->function_name = $function_name;
+		$job->uniq_id = $unique_id;
+		$job->background = true;
+		$job->payload = $data;
+
+		$this->createJob($job);
 	}
 
 	private function handleSubmitJobSched($data){
@@ -226,16 +290,65 @@ class ClientRequestHandler
 		$data = $data[7];
 		// above data tells server at what time to run the job
 		// $handle = $this->assignHandle();
-		$this->sendResponse(self::JOB_CREATED,$handle);
+
+		$today = date('Y-m-d-H-i');
+		$sched = date('Y-m-d-H-i',strtotime(date('Y').'-'.$m.'-'.$d.'-'.$h.'-'.$i));
+
+		if($sched < $today){
+			list($y,$tail) = explode('-',$sched,2);
+			$y += 1;
+			$sched = $y.'-'.$tail;
+		}
+
+		$delay = strtotime($sched)-strtotime($today);
+
+		// if delay is over 60 days, it's probably an error
+		if($delay > (86400 * 60)){
+			$delay = 0;
+		}
+		$delay = max(0,$delay);
+
+		$job = new Job();
+		$job->client_uuid = $this->ident;
+		$job->delay = $delay;
+		$job->sched = $sched;
+		$job->created = time();
+		$job->priority = 'normal';
+		$job->function_name = $function_name;
+		$job->uniq_id = $unique_id;
+		$job->background = false;
+		$job->payload = $data;
+
+		$this->createJob($job);
 	}
 
 	private function handleSubmitJobEpoch($data){
 		list($function_name,$unique_id,$epoch_time,$data) = explode(0x00,$data);
 		// like "SUBMIT_JOB_BG", but run job at $epoch_time instead of immediately
 		// $handle = $this->assignHandle();
-		$this->sendResponse(self::JOB_CREATED,$handle);
+
+		$job = new Job();
+		$job->client_uuid = $this->ident;
+		$job->delay = $epoch_time - time();
+		$job->created = time();
+		$job->priority = 'normal';
+		$job->function_name = $function_name;
+		$job->uniq_id = $unique_id;
+		$job->background = false;
+		$job->payload = $data;
+
+		$this->createJob($job);
 	}
 
+	private function createJob(Job $job){
+		$this->cb = function($uuid) use($job) {
+			GearmandPHP::registerJob($uuid, $job);
+			$this->sendResponse(self::JOB_CREATED, $uuid);
+		};
+		$this->cb->bindTo($this);
+
+		$this->schivel->store($job,$this->cb);
+	}
 
 	public function sendResponse($type, $message){
 
