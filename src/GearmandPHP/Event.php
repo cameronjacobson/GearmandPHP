@@ -4,7 +4,7 @@ namespace GearmandPHP;
 
 use \WindowSeat\EventInterface;
 
-class Event implements EventInterface;
+class Event implements EventInterface
 {
 	private $data;
 

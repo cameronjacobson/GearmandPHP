@@ -113,37 +113,37 @@ class ClientRequestHandler
 	// WORK_* requests to client are WORK_* requests
 	//  received from worker
 	private function handleWorkData($data){
-		list(,$data) = explode(0x00,$data,2);
+		list(,$data) = explode("\0",$data,2);
 		$this->sendResponse(self::WORK_DATA,$data);
 	}
 
 	private function handleWorkWarning($data){
-		list(,$data) = explode(0x00,$data,2);
+		list(,$data) = explode("\0",$data,2);
 		$this->sendResponse(self::WORK_WARNING,$data);
 	}
 
 	private function handleWorkStatus($data){
-		list(,$data) = explode(0x00,$data,2);
+		list(,$data) = explode("\0",$data,2);
 		$this->sendResponse(self::WORK_STATUS,$data);
 	}
 
 	private function handleWorkComplete($data){
-		list(,$data) = explode(0x00,$data,2);
+		list(,$data) = explode("\0",$data,2);
 		$this->sendResponse(self::WORK_COMPLETE,$data);
 	}
 
 	private function handleWorkFail($data){
-		list(,$data) = explode(0x00,$data,2);
+		list(,$data) = explode("\0",$data,2);
 		$this->sendResponse(self::WORK_FAIL,$data);
 	}
 
 	private function handleWorkException($data){
-		list(,$data) = explode(0x00,$data,2);
+		list(,$data) = explode("\0",$data,2);
 		$this->sendResponse(self::WORK_EXCEPTION,$data);
 	}
 
 	private function handleSubmitJob($data){
-		list($function_name,$unique_id,$data) = explode(0x00,$data);
+		list($function_name,$unique_id,$data) = explode("\0",$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
 
@@ -163,14 +163,30 @@ class ClientRequestHandler
 	private function handleGetStatus($data){
 		$handle = $data;
 		// client is requesting status on a particular job
-		$data = implode(0x00, array(
+		$data = implode("\0", array(
 			$handle,
-			$this->knowJobStatus() ? 1 : 0,
-			$this->isRunning() ? 1 : 0,
-			$percent_complete_numerator,
-			$percent_complete_denominator
+			$this->knowJobStatus($handle) ? 1 : 0,
+			$this->isRunning($handle) ? 1 : 0,
+			$this->getStatusNumerator($handle),
+			$this->getStatusDenominator($handle)
 		));
 		$this->sendResponse(self::STATUS_RES,$data);
+	}
+
+	private function knowJobStatus($handle){
+		return !empty(Gearmand::getJobState($handle, 'state'));
+	}
+
+	private function isRunning($handle){
+		return Gearmand::getJobState($handle, 'state') === 'processing';
+	}
+
+	private function getStatusNumerator($handle){
+		return (int)Gearmand::getJobState($handle, 'percent_done_numerator');
+	}
+
+	private function getStatusDenominator($handle){
+		return (int)Gearmand::getJobState($handle, 'percent_done_denominator');
 	}
 
 	private function handleEchoReq($data){
@@ -178,7 +194,7 @@ class ClientRequestHandler
 	}
 
 	private function handleSubmitJobBg($data){
-		list($function_name,$unique_id,$data) = explode(0x00,$data);
+		list($function_name,$unique_id,$data) = explode("\0",$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
 
@@ -196,7 +212,7 @@ class ClientRequestHandler
 	}
 
 	private function handleSubmitJobHigh($data){
-		list($function_name,$unique_id,$data) = explode(0x00,$data);
+		list($function_name,$unique_id,$data) = explode("\0",$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
 
@@ -221,11 +237,15 @@ class ClientRequestHandler
 				// notify server it should forward "WORK_EXCEPTION" packets to client
 				$this->sendResponse(self::OPTION_RES,$option);
 				break;
+			default:
+				error_log('invalid option for client: '.$option);
+				break;
 		}
+		Gearmand::clientAddOption($this->ident,$option);
 	}
 
 	private function handleSubmitJobHighBg($data){
-		list($function_name,$unique_id,$data) = explode(0x00,$data);
+		list($function_name,$unique_id,$data) = explode("\0",$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
 
@@ -243,7 +263,7 @@ class ClientRequestHandler
 	}
 
 	private function handleSubmitJobLow($data){
-		list($function_name,$unique_id,$data) = explode(0x00,$data);
+		list($function_name,$unique_id,$data) = explode("\0",$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
 
@@ -261,7 +281,7 @@ class ClientRequestHandler
 	}
 
 	private function handleSubmitJobLowBg($data){
-		list($function_name,$unique_id,$data) = explode(0x00,$data);
+		list($function_name,$unique_id,$data) = explode("\0",$data);
 		// respond with 'JOB_CREATED' packet
 		// $handle = $this->assignHandle();
 
@@ -279,7 +299,7 @@ class ClientRequestHandler
 	}
 
 	private function handleSubmitJobSched($data){
-		$data = explode(0x00,$data);
+		$data = explode("\0",$data);
 		$function_name = $data[0];
 		$unique_id = $data[1];
 		$minute = $data[2];
@@ -323,7 +343,7 @@ class ClientRequestHandler
 	}
 
 	private function handleSubmitJobEpoch($data){
-		list($function_name,$unique_id,$epoch_time,$data) = explode(0x00,$data);
+		list($function_name,$unique_id,$epoch_time,$data) = explode("\0",$data);
 		// like "SUBMIT_JOB_BG", but run job at $epoch_time instead of immediately
 		// $handle = $this->assignHandle();
 
@@ -341,18 +361,17 @@ class ClientRequestHandler
 	}
 
 	private function createJob(Job $job){
-		$this->cb = function($uuid) use($job) {
-			GearmandPHP::registerJob($uuid, $job);
+		$cb = function($uuid) use($job) {
+			Gearmand::registerJob($uuid, $job);
 			$this->sendResponse(self::JOB_CREATED, $uuid);
 		};
-		$this->cb->bindTo($this);
-
-		$this->schivel->store($job,$this->cb);
+		$cb->bindTo($this);
+		$this->schivel->store($job, $cb);
 	}
 
 	public function sendResponse($type, $message){
 
-		$response = pack('c4',0x00,ord('R'),ord('E'),ord('S'));
+		$response = pack('c4',"\0",ord('R'),ord('E'),ord('S'));
 		$response.= pack('N',$type);
 		$response.= pack('N',strlen($message));
 		$response.= $message;

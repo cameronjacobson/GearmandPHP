@@ -27,24 +27,26 @@ class Gearmand
 	public function __construct(Config $config){
 
 		$this->config = $config;
-		$this->base = $config->base;
 		$this->dns_base = $config->dns_base;
 
 		// TODO: Consider defining an interface
 		//  instead of requiring use of Schivel
-		$this->config->base = &$this->base;
+		$this->config->base = &$config->base;
 		$this->config->dns_base = $this->dns_base;
+
+		$this->config->config['couchdb']['base'] = $this->config->base;
+		$this->config->config['couchdb']['dns_base'] = $this->config->dns_base;
 		$this->couchdb = new Schivel(new CouchDB(
 			$this->config->config['couchdb']
 		));
 
+		$this->couchdb->setDebug(true);
 		$this->windowseat = new WindowSeat(new CouchConfig(
-			$this->base,
+			$this->config->base,
 			$this->config->config['windowseat']
 		));
 		$this->windowseat->setEventHandler(new EventHandler());
 		$this->windowseat->initialize();
-
 
 		// TODO:
 		// Are we recovering from crash?
@@ -53,8 +55,10 @@ class Gearmand
 		// 3) Proceed with normal setup
 
 		self::$state = array(
-			'worker'=>array(),
-			'client'=>array(),
+			'worker'=>array(
+			),
+			'client'=>array(
+			),
 			'admin'=>array(),
 			'jobs'=>array()
 		);
@@ -62,21 +66,20 @@ class Gearmand
 		self::$priority_queue = new JobQueue();
 
 		//$this->persistent_store = $config->store;
-
-		$this->client_listener = new EventListener($this->base,
-			array($this, 'clientConnect'), $this->base,
+		$this->client_listener = new EventListener($this->config->base,
+			array($this, 'clientConnect'), $this->config->base,
 			EventListener::OPT_CLOSE_ON_FREE | EventListener::OPT_REUSEABLE, -1,
 			$config->server['ip'].':'.$config->server['client_port']
 		);
 
-		$this->worker_listener = new EventListener($this->base,
-			array($this, 'workerConnect'), $this->base,
+		$this->worker_listener = new EventListener($this->config->base,
+			array($this, 'workerConnect'), $this->config->base,
 			EventListener::OPT_CLOSE_ON_FREE | EventListener::OPT_REUSEABLE, -1,
 			$config->server['ip'].':'.$config->server['worker_port']
 		);
 
-		$this->admin_listener = new EventListener($this->base,
-			array($this, 'adminConnect'), $this->base,
+		$this->admin_listener = new EventListener($this->config->base,
+			array($this, 'adminConnect'), $this->config->base,
 			EventListener::OPT_CLOSE_ON_FREE | EventListener::OPT_REUSEABLE, -1,
 			$config->server['ip'].':'.$config->server['admin_port']
 		);
@@ -88,7 +91,7 @@ class Gearmand
 	}
 
 	public function run(){
-		$this->base->loop();
+		$this->config->base->loop();
 	}
 
 	public function __destruct() {
@@ -96,11 +99,11 @@ class Gearmand
 	}
 
 	public function dispatch() {
-		$this->base->dispatch();
+		$this->config->base->dispatch();
 	}
 
 	public function clientConnect($listener, $fd, $address, $ctx) {
-		$base = $this->base;
+		$base = $this->config->base;
 		$ident = $this->getUUID('client');
 		self::$state['client'][$ident] = array(
 			'connection'=>new ClientConnection($base, $fd, $ident, $this->couchdb)
@@ -108,7 +111,7 @@ class Gearmand
 	}
 
 	public function workerConnect($listener, $fd, $address, $ctx) {
-		$base = $this->base;
+		$base = $this->config->base;
 		$ident = $this->getUUID('worker');
 		self::$state['worker'][$ident] = array(
 			'connection'=>new WorkerConnection($base, $fd, $ident, $this->couchdb)
@@ -116,7 +119,7 @@ class Gearmand
 	}
 
 	public function adminConnect($listener, $fd, $address, $ctx) {
-		$base = $this->base;
+		$base = $this->config->base;
 		$ident = $this->getUUID('admin');
 		self::$state['admin'][$ident] = array(
 			'connection'=>new AdminConnection($base, $fd, $ident, $this->couchdb)
@@ -141,6 +144,14 @@ class Gearmand
 		}
 	}
 
+	public static function clientAddOption($ident, $option_name){
+		self::$state['client'][$ident]['options'][$option_name] = true;
+	}
+
+	public static function clientGetOptions($ident){
+		return array_keys(self::$state['client'][$ident]['options']);
+	}
+
 	public static function setWorkerState($ident, $key, $value){
 		if(!in_array($key,array('connection'))){
 			self::$state['worker'][$ident][$key] = $value;
@@ -151,12 +162,16 @@ class Gearmand
 		self::$state['worker'][$ident]['options'][$option_name] = true;
 	}
 
+	public static function workerGetOptions($ident){
+		return array_keys(self::$state['worker'][$ident]['options']);
+	}
+
 	public static function workerAddFunction($ident, $function_name, $timeout = 0){
 		self::$state['worker'][$ident]['functions'][$function_name] = $timeout;
 	}
 
 	public static function workerRemoveFunction($ident, $function_name){
-		if(!isset(self::$state['worker'][$ident]['functions'][$function_name])){
+		if(isset(self::$state['worker'][$ident]['functions'][$function_name])){
 			unset(self::$state['worker'][$ident]['functions'][$function_name]);
 		}
 	}
@@ -164,22 +179,27 @@ class Gearmand
 
 
 	public static function getJobState($ident, $key){
-		self::$state['job'][$ident][$key] = $value;
+		return self::getState('job',$ident,$key);
 	}
 
 	public static function getAdminState($ident, $key){
-		self::$state['admin'][$ident][$key] = $value;
+		return self::getState('admin',$ident,$key);
 	}
 
 	public static function getClientState($ident, $key){
-		self::$state['client'][$ident][$key] = $value;
+		return self::getState('client',$ident,$key);
 	}
 
 	public static function getWorkerState($ident, $key){
-		self::$state['worker'][$ident][$key] = $value;
+		return self::getState('worker',$ident,$key);
 	}
 
-
+	private static function getState($type,$ident,$key){
+		if(!isset(self::$state[$type][$ident][$key])){
+			return null;
+		}
+		return self::$state[$type][$ident][$key];
+	}
 
 	public static function registerJob($ident, Job $job){
 		self::$state['jobs'][$ident] = $job;
@@ -192,7 +212,7 @@ class Gearmand
 
 
 	public function accept_error_cb($listener, $ctx) {
-		$base = $this->base;
+		$base = $this->config->base;
 
 		fprintf(STDERR, "Got an error %d (%s) on the listener. "
 			."Shutting down.\n",

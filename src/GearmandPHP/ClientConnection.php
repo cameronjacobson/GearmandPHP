@@ -3,7 +3,6 @@
 namespace GearmandPHP;
 
 use \SplQueue;
-use \Event;
 use \EventDnsBase;
 use \EventBufferEvent;
 use \GearmandPHP\EventStoreInterface;
@@ -69,14 +68,14 @@ class ClientConnection
 			array($this,'eventCallback')
 		);
 
-		$this->bev->setWatermark(Event::READ|Event::WRITE, self::MIN_WATERMARK, 0);
+		$this->bev->setWatermark(\Event::READ|\Event::WRITE, self::MIN_WATERMARK, 0);
 
-		if(!$this->bev->enable(Event::READ | Event::WRITE)){
+		if(!$this->bev->enable(\Event::READ | \Event::WRITE)){
 			echo 'failed to enable'.PHP_EOL;
 		}
 /*
 		// If client hasn't sent headers within 3 sec, kill it
-		$e = Event::timer($base, function() use (&$e, $ident){
+		$e = \Event::timer($base, function() use (&$e, $ident){
 			if(empty($this->headers)){
 				Server::disconnect('client',null,$ident,null);
 			}
@@ -128,7 +127,7 @@ class ClientConnection
 
 	public function sendResponse($type, $message){
 
-		$response = pack('c4',0x00,ord('R'),ord('E'),ord('S'));
+		$response = pack('c4',"\0",ord('R'),ord('E'),ord('S'));
 		$response.= pack('N',$type);
 		$response.= pack('N',strlen($message));
 		$response.= $message;

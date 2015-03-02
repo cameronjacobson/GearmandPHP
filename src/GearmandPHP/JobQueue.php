@@ -1,6 +1,8 @@
 <?php
 
-class JobQueue extends SplPriorityQueue
+namespace GearmandPHP;
+
+class JobQueue extends \SplPriorityQueue
 {
 	private $priorities = array(
 		'low'=>1,

@@ -2,6 +2,8 @@
 
 namespace GearmandPHP;
 
+use \GearmandPHP\Gearmand;
+
 class WorkerRequestHandler
 {
 	// Request Types
@@ -22,6 +24,7 @@ class WorkerRequestHandler
 	const WORK_DATA = 28;
 	const WORK_WARNING = 29;
 	const GRAB_JOB_UNIQ = 30;
+	const GRAB_JOB_ALL = 39;
 
 	// Response Types
 	const NOOP = 6;
@@ -57,6 +60,9 @@ class WorkerRequestHandler
 				break;
 			case self::GRAB_JOB:
 				$this->handleGrabJob();
+				break;
+			case self::GRAB_JOB_ALL:
+				$this->handleGrabJobAll();
 				break;
 			case self::ECHO_REQ:
 				$this->handleEchoReq($data);
@@ -105,7 +111,17 @@ class WorkerRequestHandler
 	private function handleGrabJob(){
 		// server responds with "NO_JOB" or "JOB_ASSIGN"
 		if($job = $this->getJobFromQueue()){
-			$this->sendResponse(self::JOB_ASSIGN, $job->uuid, $job->function_name);
+			$this->sendResponse(self::JOB_ASSIGN, $job->uniq_id."\0".$job->function_name."\0".$job->payload);
+		}
+		else{
+			$this->sendResponse(self::NO_JOB);
+		}
+	}
+
+	private function handleGrabJobAll(){
+		// server responds with "NO_JOB" or "JOB_ASSIGN"
+		if($job = $this->getJobFromQueue()){
+			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->uniq_id."\0".$job->function_name."\0".$job->client_uuid."\0".$job->payload);
 		}
 		else{
 			$this->sendResponse(self::NO_JOB);
@@ -115,36 +131,46 @@ class WorkerRequestHandler
 	private function handleGrabJobUniq(){
 		// server responds with "NO_JOB" or "JOB_ASSIGN_UNIQ"
 		if($job = $this->getJobFromQueue()){
-			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->uuid, $job->function_name, $job->client_uuid);
+			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->uniq_id."\0".$job->function_name."\0".$job->client_uuid."\0".$job->payload);
 		}
 		else{
 			$this->sendResponse(self::NO_JOB);
 		}
 	}
 
-
-
+	private function getJobFromQueue(){
+		$worker = Gearmand::$state['worker'][$this->ident];
+		foreach(Gearmand::$priority_queue as $job){
+			if(isset($worker['functions'][$job->function_name])){
+				if(empty(Gearmand::getJobState($job->uniq_id,'worker'))){
+					Gearmand::setJobState($job->uniq_id,'worker',$this->ident);
+					return $job;
+				}
+			}
+		}
+		return false;
+	}
 
 	private function handleCanDo($data){
-		GearmandPHP::workerAddFunction($this->ident, $data);
+		Gearmand::workerAddFunction($this->ident, $data);
 	}
 
 	private function handleCantDo($data){
-		GearmandPHP::workerRemoveFunction($this->ident, $data);
+		Gearmand::workerRemoveFunction($this->ident, $data);
 	}
 
 	private function handleResetAbilities(){
 		// $data is empty
 		// RESET "abilities" to empty
-		GearmandPHP::setWorkerState($this->ident, 'functions', array());
+		Gearmand::setWorkerState($this->ident, 'functions', array());
 	}
 
 	private function handleCanDoTimeout($data){
-		list($function_name,$timeout) = explode(0x00,$data);
+		list($function_name,$timeout) = explode("\0",$data);
 		// same as "CAN_DO", but $timeout indicates how long the job can run
 		// if the job takes longer than $timeout seconds, it will fail
 		$timeout = max(0,(int)$timeout);
-		GearmandPHP::workerAddFunction($this->ident, $data, $timeout);
+		Gearmand::workerAddFunction($this->ident, $data, $timeout);
 	}
 
 	private function handlePreSleep($data){
@@ -152,7 +178,7 @@ class WorkerRequestHandler
 		// Set "status" to "sleeping"
 		//   which means server needs to wake up worker with "NOOP"
 		//   if a job comes in that the worker can do
-		GearmandPHP::setWorkerState($this->ident, 'state', 'sleeping');
+		Gearmand::setWorkerState($this->ident, 'state', 'sleeping');
 	}
 
 	private function handleEchoReq($data){
@@ -162,58 +188,78 @@ class WorkerRequestHandler
 	private function handleSetClientID($data){
 		$client_id = $data;
 		// unique string to identify the worker instance
-		GearmandPHP::setWorkerState($this->ident, 'alias', $client_id);
+		Gearmand::setWorkerState($this->ident, 'alias', $client_id);
 	}
 
 	private function handleAllYours($data){
 		// $data is empty
 		// notify server that the worker is connected exclusively
-		GearmandPHP::setWorkerState($this->ident, 'state', 'waiting');
+		Gearmand::setWorkerState($this->ident, 'state', 'waiting');
 	}
 
 	private function handleWorkStatus($data){
-		list($handle,$numerator,$denominator) = explode(0x00,$data);
+		list($handle,$numerator,$denominator) = explode("\0",$data);
 		// relay "percentage complete" to client, and update on server
-		GearmandPHP::setJobState($handle, 'percent_done_numerator', $numerator);
-		GearmandPHP::setJobState($handle, 'percent_done_denominator', $denominator);
+		Gearmand::setJobState($handle, 'percent_done_numerator', $numerator);
+		Gearmand::setJobState($handle, 'percent_done_denominator', $denominator);
 		$client_uuid = $this->getJobClient($handle);
-		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_STATUS, $data);
+		if(!empty($client_uuid)){
+			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_STATUS, $data);
+		}
 	}
 
 	// notify server / clients that the job completed successfully
 	private function handleWorkComplete($data){
-		list($handle,$data) = explode(0x00,$data);
+		list($handle,$data) = explode("\0",$data);
 		$client_uuid = $this->getJobClient($handle);
-		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_COMPLETE, $data);
+		if(!empty($client_uuid)){
+			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_COMPLETE, $data);
+		}
 	}
 
 	// notify server / clients that job failed
 	private function handleWorkFail($data){
 		$handle = $data;
 		$client_uuid = $this->getJobClient($handle);
-		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_FAIL);
+		if(!empty($client_uuid)){
+			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_FAIL);
+		}
 	}
 
 	// notify server / clients that the job failed
 	// $data is info about the exception
 	private function handleWorkException($data){
-		list($handle,$data) = explode(0x00,$data);
+		list($handle,$data) = explode("\0",$data);
 		$client_uuid = $this->getJobClient($handle);
-		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_EXCEPTION, $data);
+		if(!empty($client_uuid)){
+			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_EXCEPTION, $data);
+		}
 	}
 
 	// supposed to relay progress info or job info to client
 	private function handleWorkData($data){
-		list($handle,$data) = explode(0x00,$data);
+		list($handle,$data) = explode("\0",$data);
 		$client_uuid = $this->getJobClient($handle);
-		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_DATA, $data);
+		if(!empty($client_uuid)){
+			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_DATA, $data);
+		}
 	}
 
 	// relay "warning" data to the client
 	private function handleWorkWarning($data){
-		list($handle,$data) = explode(0x00,$data);
+		list($handle,$data) = explode("\0",$data);
 		$client_uuid = $this->getJobClient($handle);
-		GearmandPHP::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_WARNING, $data);
+		if(!empty($client_uuid)){
+			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_WARNING, $data);
+		}
+	}
+
+	private function getJobClient($job_handle){
+		$job = Gearmand::$state['jobs'][$job_handle];
+		if(!empty(Gearmand::$state['client'][$job->client_uuid])){
+			return Gearmand::$state['client'][$job->client_uuid];
+		}
+		return null;
 	}
 
 	private function handleOptionReq($data){
@@ -221,7 +267,7 @@ class WorkerRequestHandler
 		// currently "exceptions" is only documented possibility here
 		switch($option){
 			case 'exceptions':
-				GearmandPHP::setWorkerAddOption($this->ident, $option);
+				Gearmand::workerAddOption($this->ident, $option);
 				break;
 			default:
 				error_log('worker received unknown option request: '.$option);
@@ -232,8 +278,7 @@ class WorkerRequestHandler
 
 
 	public function sendResponse($type, $message = ''){
-
-		$response = pack('c4',0x00,ord('R'),ord('E'),ord('S'));
+		$response = pack('c4',"\0",ord('R'),ord('E'),ord('S'));
 		$response.= pack('N',$type);
 		$response.= pack('N',strlen($message));
 		$response.= $message;

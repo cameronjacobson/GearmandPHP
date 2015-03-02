@@ -84,7 +84,7 @@ class AdminConnection
 
 	public function sendResponse($type, $message, $id = null){
 
-		$response = pack('c4',0x00,ord('R'),ord('E'),ord('S'));
+		$response = pack('c4',"\0",ord('R'),ord('E'),ord('S'));
 		$response.= pack('N',$type);
 		$response.= pack('N',strlen($message));
 		$response.= $message;
