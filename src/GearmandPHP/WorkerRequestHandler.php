@@ -15,14 +15,24 @@ class WorkerRequestHandler
 	const WORK_STATUS = 12;
 	const WORK_COMPLETE = 13;
 	const WORK_FAIL = 14;
+	const WORK_EXCEPTION = 25;
+	const WORK_DATA = 28;
+	const WORK_WARNING = 29;
+
+const CLIENT_WORK_DATA = 20;
+const CLIENT_WORK_STATUS = 22;
+const CLIENT_WORK_FAIL = 24;
+const CLIENT_WORK_COMPLETE = 0;
+const CLIENT_PAUSE = 38;
+const CLIENT_IO_WAIT = 1;
+const CLIENT_WORK_EXCEPTION = 23;
+const CLIENT_WORK_WARNING = 21;
+
 	const ECHO_REQ = 16;
 	const SET_CLIENT_ID = 22;
 	const CAN_DO_TIMEOUT = 23;
 	const ALL_YOURS = 24;
-	const WORK_EXCEPTION = 25;
 	const OPTION_REQ = 26;
-	const WORK_DATA = 28;
-	const WORK_WARNING = 29;
 	const GRAB_JOB_UNIQ = 30;
 	const GRAB_JOB_ALL = 39;
 
@@ -111,7 +121,7 @@ class WorkerRequestHandler
 	private function handleGrabJob(){
 		// server responds with "NO_JOB" or "JOB_ASSIGN"
 		if($job = $this->getJobFromQueue()){
-			$this->sendResponse(self::JOB_ASSIGN, $job->uniq_id."\0".$job->function_name."\0".$job->payload);
+			$this->sendResponse(self::JOB_ASSIGN, $job->__phreezer_uuid."\0".$job->function_name."\0".$job->payload);
 		}
 		else{
 			$this->sendResponse(self::NO_JOB);
@@ -121,7 +131,7 @@ class WorkerRequestHandler
 	private function handleGrabJobAll(){
 		// server responds with "NO_JOB" or "JOB_ASSIGN"
 		if($job = $this->getJobFromQueue()){
-			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->uniq_id."\0".$job->function_name."\0".$job->client_uuid."\0".$job->payload);
+			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->__phreezer_uuid."\0".$job->function_name."\0".$job->client_uuid."\0".$job->payload);
 		}
 		else{
 			$this->sendResponse(self::NO_JOB);
@@ -131,7 +141,7 @@ class WorkerRequestHandler
 	private function handleGrabJobUniq(){
 		// server responds with "NO_JOB" or "JOB_ASSIGN_UNIQ"
 		if($job = $this->getJobFromQueue()){
-			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->uniq_id."\0".$job->function_name."\0".$job->client_uuid."\0".$job->payload);
+			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->__phreezer_uuid."\0".$job->function_name."\0".$job->client_uuid."\0".$job->payload);
 		}
 		else{
 			$this->sendResponse(self::NO_JOB);
@@ -142,8 +152,8 @@ class WorkerRequestHandler
 		$worker = Gearmand::$state['worker'][$this->ident];
 		foreach(Gearmand::$priority_queue as $job){
 			if(isset($worker['functions'][$job->function_name])){
-				if(empty(Gearmand::getJobState($job->uniq_id,'worker'))){
-					Gearmand::setJobState($job->uniq_id,'worker',$this->ident);
+				if(empty(Gearmand::getJobState($job->__phreezer_uuid,'worker'))){
+					Gearmand::setJobState($job->__phreezer_uuid,'worker',$this->ident);
 					return $job;
 				}
 			}
@@ -197,66 +207,66 @@ class WorkerRequestHandler
 		Gearmand::setWorkerState($this->ident, 'state', 'waiting');
 	}
 
-	private function handleWorkStatus($data){
-		list($handle,$numerator,$denominator) = explode("\0",$data);
+	private function handleWorkStatus($raw){
+		list($handle,$numerator,$denominator) = explode("\0",$raw);
 		// relay "percentage complete" to client, and update on server
 		Gearmand::setJobState($handle, 'percent_done_numerator', $numerator);
 		Gearmand::setJobState($handle, 'percent_done_denominator', $denominator);
-		$client_uuid = $this->getJobClient($handle);
-		if(!empty($client_uuid)){
-			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_STATUS, $data);
+		$client = $this->getJobClient($handle);
+		if(!empty($client) && !empty($client['connection'])){
+			$client['connection']->sendResponse(self::WORK_STATUS, $raw);
 		}
 	}
 
 	// notify server / clients that the job completed successfully
-	private function handleWorkComplete($data){
-		list($handle,$data) = explode("\0",$data);
-		$client_uuid = $this->getJobClient($handle);
-		if(!empty($client_uuid)){
-			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_COMPLETE, $data);
+	private function handleWorkComplete($raw){
+		list($handle,$data) = explode("\0",$raw);
+		$client = $this->getJobClient($handle);
+		if(!empty($client) && !empty($client['connection'])){
+			$client['connection']->sendResponse(self::WORK_COMPLETE, $raw);
 		}
 	}
 
 	// notify server / clients that job failed
-	private function handleWorkFail($data){
-		$handle = $data;
-		$client_uuid = $this->getJobClient($handle);
-		if(!empty($client_uuid)){
-			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_FAIL);
+	private function handleWorkFail($raw){
+		$handle = $raw;
+		$client = $this->getJobClient($handle);
+		if(!empty($client) && !empty($client['connection'])){
+			$client['connection']->sendResponse(self::WORK_FAIL,"");
 		}
 	}
 
 	// notify server / clients that the job failed
 	// $data is info about the exception
-	private function handleWorkException($data){
-		list($handle,$data) = explode("\0",$data);
-		$client_uuid = $this->getJobClient($handle);
-		if(!empty($client_uuid)){
-			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_EXCEPTION, $data);
+	private function handleWorkException($raw){
+		list($handle,$data) = explode("\0",$raw);
+		$client = $this->getJobClient($handle);
+		if(!empty($client) && !empty($client['connection'])){
+			$client['connection']->sendResponse(self::WORK_EXCEPTION, $raw);
 		}
 	}
 
 	// supposed to relay progress info or job info to client
-	private function handleWorkData($data){
-		list($handle,$data) = explode("\0",$data);
-		$client_uuid = $this->getJobClient($handle);
-		if(!empty($client_uuid)){
-			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_DATA, $data);
+	private function handleWorkData($raw){
+		list($handle,$data) = explode("\0",$raw);
+		$client = $this->getJobClient($handle);
+		if(!empty($client) && !empty($client['connection'])){
+			$client['connection']->sendResponse(self::WORK_DATA, $raw);
 		}
 	}
 
 	// relay "warning" data to the client
-	private function handleWorkWarning($data){
-		list($handle,$data) = explode("\0",$data);
-		$client_uuid = $this->getJobClient($handle);
-		if(!empty($client_uuid)){
-			Gearmand::$state['client'][$client_uuid]['connection']->sendResponse(self::WORK_WARNING, $data);
+	private function handleWorkWarning($raw){
+		list($handle,$data) = explode("\0",$raw);
+		$client = $this->getJobClient($handle);
+		if(!empty($client) && !empty($client['connection'])){
+			$client['connection']->sendResponse(self::WORK_WARNING, $raw);
 		}
 	}
 
 	private function getJobClient($job_handle){
 		$job = Gearmand::$state['jobs'][$job_handle];
-		if(!empty(Gearmand::$state['client'][$job->client_uuid])){
+		if(!empty($job) && !empty(Gearmand::$state['client'][$job->client_uuid])){
 			return Gearmand::$state['client'][$job->client_uuid];
 		}
 		return null;

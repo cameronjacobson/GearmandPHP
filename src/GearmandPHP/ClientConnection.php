@@ -126,7 +126,6 @@ class ClientConnection
 	}
 
 	public function sendResponse($type, $message){
-
 		$response = pack('c4',"\0",ord('R'),ord('E'),ord('S'));
 		$response.= pack('N',$type);
 		$response.= pack('N',strlen($message));

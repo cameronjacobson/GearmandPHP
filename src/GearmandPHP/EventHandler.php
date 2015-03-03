@@ -16,8 +16,8 @@ class EventHandler implements EventHandlerInterface
 		}
 		Gearmand::$priority_queue->insert($job,$job);
 		foreach(Gearmand::$state['worker'] as $ident=>$worker){
-			if($this->workerIsSleeping($worker) && $this->workerCanDoJob($ident, $worker,$job)){
-				Gearmand::$state['worker'][$ident]->sendResponse(WorkerRequestHandler::NOOP, '');
+			if($this->workerIsSleeping($worker) && $this->workerCanDoJob($worker,$job)){
+				Gearmand::$state['worker'][$ident]['connection']->sendResponse(WorkerRequestHandler::NOOP, '');
 			}
 		}
 	}

@@ -1,5 +1,15 @@
 <?php
-
+/*
+echo GEARMAN_SUCCESS.PHP_EOL;
+echo GEARMAN_PAUSE.PHP_EOL;
+echo GEARMAN_IO_WAIT.PHP_EOL;
+echo GEARMAN_WORK_STATUS.PHP_EOL;
+echo GEARMAN_WORK_DATA.PHP_EOL;
+echo GEARMAN_WORK_EXCEPTION.PHP_EOL;
+echo GEARMAN_WORK_WARNING.PHP_EOL;
+echo GEARMAN_WORK_FAIL.PHP_EOL;
+exit;
+*/
 # Create our client object.
 $gmclient= new GearmanClient();
 
@@ -34,4 +44,4 @@ do
       exit;
   }
 }
-while($gmclient->returnCode() != GEARMAN_SUCCESS);
+while(($code = $gmclient->returnCode()) != GEARMAN_SUCCESS);
