@@ -44,6 +44,7 @@ const CLIENT_WORK_WARNING = 21;
 	const ERROR = 19;
 	const OPTION_RES = 27;
 	const JOB_ASSIGN_UNIQ = 31;
+	const JOB_ASSIGN_ALL = 40;
 
 	private $bev;
 

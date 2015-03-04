@@ -19,6 +19,9 @@ class ClientRequestHandler
 	const SUBMIT_JOB_SCHED = 35;
 	const SUBMIT_JOB_EPOCH = 36;
 
+	const SUBMIT_REDUCE_JOB = 37;
+	const SUBMIT_REDUCE_JOB_BACKGROUND = 38;
+
 	// Response Types
 	const JOB_CREATED = 8;
 	const WORK_STATUS= 12;
