@@ -119,30 +119,31 @@ const CLIENT_WORK_WARNING = 21;
 
 
 
-	private function handleGrabJob(){
+	public function handleGrabJob(){
 		// server responds with "NO_JOB" or "JOB_ASSIGN"
 		if($job = $this->getJobFromQueue()){
-			$this->sendResponse(self::JOB_ASSIGN, $job->__phreezer_uuid."\0".$job->function_name."\0".$job->payload);
+			$this->setJobState($job->uuid, 'worker', $this->ident);
+			$this->sendResponse(self::JOB_ASSIGN, $job->uuid."\0".$job->function_name."\0".$job->payload);
 		}
 		else{
 			$this->sendResponse(self::NO_JOB);
 		}
 	}
 
-	private function handleGrabJobAll(){
+	public function handleGrabJobAll(){
 		// server responds with "NO_JOB" or "JOB_ASSIGN"
 		if($job = $this->getJobFromQueue()){
-			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->__phreezer_uuid."\0".$job->function_name."\0".$job->client_uuid."\0".$job->payload);
+			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->uuid."\0".$job->function_name."\0".$job->client_uuid."\0".$job->payload);
 		}
 		else{
 			$this->sendResponse(self::NO_JOB);
 		}
 	}
 
-	private function handleGrabJobUniq(){
+	public function handleGrabJobUniq(){
 		// server responds with "NO_JOB" or "JOB_ASSIGN_UNIQ"
 		if($job = $this->getJobFromQueue()){
-			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->__phreezer_uuid."\0".$job->function_name."\0".$job->client_uuid."\0".$job->payload);
+			$this->sendResponse(self::JOB_ASSIGN_UNIQ, $job->uuid."\0".$job->function_name."\0".$job->client_uuid."\0".$job->payload);
 		}
 		else{
 			$this->sendResponse(self::NO_JOB);
@@ -153,8 +154,8 @@ const CLIENT_WORK_WARNING = 21;
 		$worker = Gearmand::$state['worker'][$this->ident];
 		foreach(Gearmand::$priority_queue as $job){
 			if(isset($worker['functions'][$job->function_name])){
-				if(empty(Gearmand::getJobState($job->__phreezer_uuid,'worker'))){
-					Gearmand::setJobState($job->__phreezer_uuid,'worker',$this->ident);
+				if(empty(Gearmand::getJobState($job->uuid,'worker'))){
+					Gearmand::setJobState($job->uuid,'worker',$this->ident);
 					return $job;
 				}
 			}
@@ -226,6 +227,8 @@ const CLIENT_WORK_WARNING = 21;
 		if(!empty($client) && !empty($client['connection'])){
 			$client['connection']->sendResponse(self::WORK_COMPLETE, $raw);
 		}
+		$this->bev->free();
+		unset(Gearmand::$state['worker'][$this->ident]);
 	}
 
 	// notify server / clients that job failed

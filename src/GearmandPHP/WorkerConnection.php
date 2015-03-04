@@ -12,6 +12,7 @@ use \GearmandPHP\ClientResponseHandler;
 
 class WorkerConnection
 {
+	public $handler;
 	private $bev, $base, $buffer, $id, $fd, $headers;
 
 	const MIN_WATERMARK = 1;
