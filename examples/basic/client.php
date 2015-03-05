@@ -21,7 +21,7 @@ echo "Sending job\n";
 # Send reverse job
 do
 {
-  $result = $gmclient->do("reverse", "Hello!");
+  $result = $gmclient->do("reverse", empty($argv[1]) ? 'Hello!' : $argv[1]);
 
   # Check for various return packets and errors.
   switch($gmclient->returnCode())
